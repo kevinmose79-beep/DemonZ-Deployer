@@ -33,7 +33,7 @@ const CONFIG = Object.freeze({
   // ─────────────────────────────────────────────────────────
 
   PROXY_URL:
-    'https://demonzdeployer.demonzdevelopment.workers.dev',
+    'https://demonzdeployer.kevinmose79.workers.dev',
 
   // ─────────────────────────────────────────────────────────
   // DEPLOYER REPOSITORY
