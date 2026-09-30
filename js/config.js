@@ -1,48 +1,100 @@
 /**
- * DemonZ Deployer — Configuration (v3.0.0 "Command Center")
- *
- * SETUP REQUIRED:
- * 1. Create (or update) a GitHub OAuth App at:
- *    https://github.com/settings/developers → OAuth Apps
- *
- *    Required settings:
- *    - Homepage URL:              https://<your-username>.github.io/DemonZ-Deployer/
- *    - Authorization callback URL: https://<your-username>.github.io/DemonZ-Deployer/
- *
- *    Copy your CLIENT_ID below. Do NOT put your Client Secret here —
- *    it lives exclusively in the Cloudflare Worker as an env variable.
- *
- * 2. Deploy worker/worker.js to Cloudflare Workers:
- *    https://workers.cloudflare.com
- *    - Add CLIENT_SECRET as an encrypted Secret in Worker Settings → Variables
- *    - Copy the *.workers.dev URL into PROXY_URL below
- *
- * That's it. No backend server. Client secret never exposed to the browser.
+ * DemonZ Deployer — Configuration
+ * v3.0.2
  */
 
 const CONFIG = Object.freeze({
-  // ── App version ────────────────────────────────────────────
-  VERSION: '3.0.1',
 
-  // ── Required — fill these in ───────────────────────────────
-  CLIENT_ID:  'Ov23lihwttlD8fFramM9',
-  PROXY_URL:  'https://demonzdeployer.demonzdevelopment.workers.dev',
+  // ─────────────────────────────────────────────
+  // APPLICATION
+  // ─────────────────────────────────────────────
 
-  // ── Fixed — do not change ──────────────────────────────────
-  DEPLOYER_REPO: 'DemonZDevelopment/DemonZ-Deployer',
-  WORKFLOW_PATH: '.github/workflows/deployer-pipeline.yml',
-  SCOPES:        'repo,workflow',
+  VERSION: '3.0.2',
 
-  // ── Pipeline version tracking ──────────────────────────────
-  // The deployer-pipeline.yml contains a tag like:
-  //   # DZ_PIPELINE_VERSION=3.0.0
-  // This is used to detect outdated pipelines in user repos.
-  PIPELINE_VERSION:     '3.0.1',
-  PIPELINE_VERSION_TAG: 'DZ_PIPELINE_VERSION',
+  APP_URL:
+    'https://kevinmose79-beep.github.io/DemonZ-Deployer/',
 
-  // ── Defaults ───────────────────────────────────────────────
-  DEFAULT_COMMIT_MSG: 'build(sync): update workspace via DemonZ Deployer',
-  MAX_HISTORY_ENTRIES: 50,
-  ACTIONS_POLL_INTERVAL: 5000,  // ms between Actions status polls
-  ACTIONS_POLL_TIMEOUT:  300000  // stop polling after 5 minutes
+
+  // ─────────────────────────────────────────────
+  // GITHUB OAUTH
+  // ─────────────────────────────────────────────
+
+  CLIENT_ID:
+    'Ov23lihwttlD8fFramM9',
+
+  PROXY_URL:
+    'https://demonzdeployer.demonzdevelopment.workers.dev',
+
+  OAUTH_AUTHORIZE_URL:
+    'https://github.com/login/oauth/authorize',
+
+  OAUTH_EXCHANGE_PATH:
+    '/exchange',
+
+  SCOPES:
+    'repo,workflow',
+
+
+  // ─────────────────────────────────────────────
+  // DEPLOYER REPOSITORY
+  // ─────────────────────────────────────────────
+
+  DEPLOYER_REPO:
+    'DemonZDevelopment/DemonZ-Deployer',
+
+  WORKFLOW_PATH:
+    '.github/workflows/deployer-pipeline.yml',
+
+
+  // ─────────────────────────────────────────────
+  // PIPELINE VERSION
+  // ─────────────────────────────────────────────
+
+  PIPELINE_VERSION:
+    '3.0.2',
+
+  PIPELINE_VERSION_TAG:
+    'DZ_PIPELINE_VERSION',
+
+
+  // ─────────────────────────────────────────────
+  // DEPLOYMENT DEFAULTS
+  // ─────────────────────────────────────────────
+
+  DEFAULT_COMMIT_MSG:
+    'build(sync): update workspace via DemonZ Deployer',
+
+  MAX_HISTORY_ENTRIES:
+    50,
+
+  ACTIONS_POLL_INTERVAL:
+    5000,
+
+  ACTIONS_POLL_TIMEOUT:
+    300000,
+
+
+  // ─────────────────────────────────────────────
+  // LOCAL STORAGE
+  // ─────────────────────────────────────────────
+
+  STORAGE_KEYS: Object.freeze({
+
+    TOKEN:
+      'dz_token',
+
+    USER:
+      'dz_user',
+
+    OAUTH_STATE:
+      'dz_oauth_state',
+
+    HISTORY:
+      'dz_deployment_history',
+
+    SOUND:
+      'dz_sound_enabled'
+
+  })
+
 });
