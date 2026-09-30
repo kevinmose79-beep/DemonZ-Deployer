@@ -25,7 +25,7 @@ const CONFIG = Object.freeze({
   VERSION: '3.0.1',
 
   // ── Required — fill these in ───────────────────────────────
-  CLIENT_ID:  'Ov23liFAyEj9YNz0XrRN',
+  CLIENT_ID:  'Ov23lihwttlD8fFramM9',
   PROXY_URL:  'https://demonzdeployer.demonzdevelopment.workers.dev',
 
   // ── Fixed — do not change ──────────────────────────────────
@@ -44,5 +44,5 @@ const CONFIG = Object.freeze({
   DEFAULT_COMMIT_MSG: 'build(sync): update workspace via DemonZ Deployer',
   MAX_HISTORY_ENTRIES: 50,
   ACTIONS_POLL_INTERVAL: 5000,  // ms between Actions status polls
-  ACTIONS_POLL_TIMEOUT:  300000, // stop polling after 5 minutes
+  ACTIONS_POLL_TIMEOUT:  300000  // stop polling after 5 minutes
 });
