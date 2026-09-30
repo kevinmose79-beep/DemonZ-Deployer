@@ -2,64 +2,96 @@
  * DemonZ Deployer — Cloudflare Worker
  * v3.1.0
  *
- * Secure GitHub OAuth token exchange.
- *
- * Frontend:
- * https://kevinmose79-beep.github.io/DemonZ-Deployer/
+ * GitHub OAuth secure token exchange.
  *
  * IMPORTANT:
- * CLIENT_SECRET must ONLY exist as a Cloudflare Worker Secret.
+ * CLIENT_SECRET must be configured in Cloudflare:
+ *
+ * Worker
+ * → Settings
+ * → Variables and Secrets
+ * → Add Secret
+ *
+ * Name:
+ * CLIENT_SECRET
+ *
+ * Never place the secret in this code.
  */
 
 // ─────────────────────────────────────────────────────────────
 // CONFIGURATION
 // ─────────────────────────────────────────────────────────────
 
-const EXPECTED_CLIENT_ID = 'Ov23liFAyEj9YNz0XrRN';
+const CLIENT_ID =
+  'Ov23lihwttlD8fFramM9';
+
 
 const ALLOWED_ORIGINS = new Set([
+
   'https://kevinmose79-beep.github.io',
+
   'http://localhost',
-  'http://127.0.0.1',
+
+  'http://127.0.0.1'
+
 ]);
 
-const EXCHANGE_PATH = '/exchange';
 
-const MAX_BODY_BYTES = 2048;
+const EXCHANGE_PATH =
+  '/exchange';
 
-const RATE_LIMIT_MAX = 10;
-const RATE_LIMIT_WINDOW_SECONDS = 300;
 
-// Fallback rate-limit store.
-// KV is preferred when RATE_LIMIT is configured.
-const memoryRateLimit = new Map();
+const MAX_BODY_BYTES =
+  2048;
 
 
 // ─────────────────────────────────────────────────────────────
 // CORS
 // ─────────────────────────────────────────────────────────────
 
-function getAllowedOrigin(request) {
-  const origin = request.headers.get('Origin');
+function getOrigin(request) {
 
-  if (!origin) {
+  const origin =
+    request.headers.get('Origin');
+
+  if (
+    !origin ||
+    !ALLOWED_ORIGINS.has(origin)
+  ) {
+
     return null;
   }
 
-  return ALLOWED_ORIGINS.has(origin) ? origin : null;
+  return origin;
 }
 
+
 function corsHeaders(origin) {
+
   const headers = {
-    'Vary': 'Origin',
+    'Vary': 'Origin'
   };
 
+
   if (origin) {
-    headers['Access-Control-Allow-Origin'] = origin;
-    headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS';
-    headers['Access-Control-Allow-Headers'] = 'Content-Type';
-    headers['Access-Control-Max-Age'] = '86400';
+
+    headers[
+      'Access-Control-Allow-Origin'
+    ] = origin;
+
+    headers[
+      'Access-Control-Allow-Methods'
+    ] = 'POST, OPTIONS';
+
+    headers[
+      'Access-Control-Allow-Headers'
+    ] = 'Content-Type';
+
+    headers[
+      'Access-Control-Max-Age'
+    ] = '86400';
   }
+
 
   return headers;
 }
@@ -69,98 +101,32 @@ function corsHeaders(origin) {
 // JSON RESPONSE
 // ─────────────────────────────────────────────────────────────
 
-function jsonResponse(data, status, origin = null, extraHeaders = {}) {
+function json(data, status, origin = null) {
+
   return new Response(
+
     JSON.stringify(data),
+
     {
       status,
+
       headers: {
-        'Content-Type': 'application/json; charset=utf-8',
+
+        'Content-Type':
+          'application/json; charset=utf-8',
+
         ...corsHeaders(origin),
-        ...extraHeaders,
-      },
+
+        'Cache-Control':
+          'no-store',
+
+        'Pragma':
+          'no-cache'
+
+      }
     }
+
   );
-}
-
-
-// ─────────────────────────────────────────────────────────────
-// RATE LIMITING
-// ─────────────────────────────────────────────────────────────
-
-async function checkRateLimit(ip, env) {
-  const now = Math.floor(Date.now() / 1000);
-  const key = `oauth:${ip}`;
-
-  // ── Cloudflare KV ──────────────────────────────────────────
-  if (env.RATE_LIMIT) {
-    let entry = null;
-
-    try {
-      const stored = await env.RATE_LIMIT.get(key);
-
-      if (stored) {
-        entry = JSON.parse(stored);
-      }
-    } catch (error) {
-      console.error('KV read failed:', error.message);
-    }
-
-    if (!entry || now >= entry.resetAt) {
-      entry = {
-        count: 0,
-        resetAt: now + RATE_LIMIT_WINDOW_SECONDS,
-      };
-    }
-
-    entry.count += 1;
-
-    try {
-      await env.RATE_LIMIT.put(
-        key,
-        JSON.stringify(entry),
-        {
-          expirationTtl: RATE_LIMIT_WINDOW_SECONDS + 10,
-        }
-      );
-    } catch (error) {
-      console.error('KV write failed:', error.message);
-    }
-
-    return {
-      limited: entry.count > RATE_LIMIT_MAX,
-      retryAfter: Math.max(1, entry.resetAt - now),
-    };
-  }
-
-  // ── In-memory fallback ────────────────────────────────────
-
-  let entry = memoryRateLimit.get(key);
-
-  if (!entry || now >= entry.resetAt) {
-    entry = {
-      count: 0,
-      resetAt: now + RATE_LIMIT_WINDOW_SECONDS,
-    };
-  }
-
-  entry.count += 1;
-
-  memoryRateLimit.set(key, entry);
-
-  // Periodic cleanup
-  if (memoryRateLimit.size > 5000) {
-    for (const [storedKey, storedEntry] of memoryRateLimit.entries()) {
-      if (now >= storedEntry.resetAt) {
-        memoryRateLimit.delete(storedKey);
-      }
-    }
-  }
-
-  return {
-    limited: entry.count > RATE_LIMIT_MAX,
-    retryAfter: Math.max(1, entry.resetAt - now),
-  };
 }
 
 
@@ -168,184 +134,226 @@ async function checkRateLimit(ip, env) {
 // REQUEST BODY
 // ─────────────────────────────────────────────────────────────
 
-async function readJsonBody(request) {
-  const contentLength = request.headers.get('Content-Length');
+async function readBody(request) {
+
+  const contentLength =
+    request.headers.get(
+      'Content-Length'
+    );
+
 
   if (contentLength) {
-    const length = Number(contentLength);
+
+    const length =
+      Number(contentLength);
 
     if (
       Number.isFinite(length) &&
       length > MAX_BODY_BYTES
     ) {
-      throw new Error('PAYLOAD_TOO_LARGE');
+
+      throw new Error(
+        'PAYLOAD_TOO_LARGE'
+      );
     }
   }
 
-  const text = await request.text();
 
-  const byteLength = new TextEncoder().encode(text).length;
+  const text =
+    await request.text();
 
-  if (byteLength > MAX_BODY_BYTES) {
-    throw new Error('PAYLOAD_TOO_LARGE');
+
+  const bytes =
+    new TextEncoder()
+      .encode(text)
+      .length;
+
+
+  if (bytes > MAX_BODY_BYTES) {
+
+    throw new Error(
+      'PAYLOAD_TOO_LARGE'
+    );
   }
 
+
   try {
+
     return JSON.parse(text);
+
   } catch {
-    throw new Error('INVALID_JSON');
+
+    throw new Error(
+      'INVALID_JSON'
+    );
   }
 }
 
 
 // ─────────────────────────────────────────────────────────────
-// OAUTH EXCHANGE
+// GITHUB TOKEN EXCHANGE
 // ─────────────────────────────────────────────────────────────
 
-async function exchangeGitHubCode(payload, env) {
+async function exchangeCode(
+  code,
+  env
+) {
 
   if (!env.CLIENT_SECRET) {
+
     console.error(
-      'DemonZ Deployer Worker: CLIENT_SECRET is missing.'
+      'CLIENT_SECRET is not configured.'
     );
 
-    throw new Error('SERVER_MISCONFIGURED');
+    throw new Error(
+      'SERVER_MISCONFIGURED'
+    );
   }
 
-  // Validate client ID
-  if (
-    typeof payload.client_id !== 'string' ||
-    payload.client_id !== EXPECTED_CLIENT_ID
-  ) {
-    throw new Error('INVALID_CLIENT_ID');
-  }
 
-  // Validate OAuth code
-  if (
-    typeof payload.code !== 'string' ||
-    payload.code.length === 0 ||
-    payload.code.length > 512
-  ) {
-    throw new Error('INVALID_CODE');
-  }
+  const response =
+    await fetch(
+      'https://github.com/login/oauth/access_token',
+      {
 
-  // Exchange the temporary OAuth code with GitHub.
-  const githubResponse = await fetch(
-    'https://github.com/login/oauth/access_token',
-    {
-      method: 'POST',
+        method:
+          'POST',
 
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'User-Agent': 'DemonZ-Deployer/3.1.0',
-      },
+        headers: {
 
-      body: JSON.stringify({
-        client_id: EXPECTED_CLIENT_ID,
-        client_secret: env.CLIENT_SECRET,
-        code: payload.code,
-      }),
-    }
-  );
+          'Accept':
+            'application/json',
 
-  const responseText = await githubResponse.text();
+          'Content-Type':
+            'application/json',
 
-  let githubData;
+          'User-Agent':
+            'DemonZ-Deployer/3.1.0'
+
+        },
+
+        body:
+          JSON.stringify({
+
+            client_id:
+              CLIENT_ID,
+
+            client_secret:
+              env.CLIENT_SECRET,
+
+            code
+
+          })
+
+      }
+    );
+
+
+  const text =
+    await response.text();
+
+
+  let data;
 
   try {
-    githubData = JSON.parse(responseText);
+
+    data =
+      JSON.parse(text);
+
   } catch {
+
     console.error(
-      'GitHub returned non-JSON response:',
-      responseText.slice(0, 500)
+      'GitHub returned non-JSON OAuth response.'
     );
 
-    throw new Error('GITHUB_INVALID_RESPONSE');
-  }
-
-  if (!githubResponse.ok) {
-    console.error(
-      'GitHub OAuth HTTP error:',
-      githubResponse.status
+    throw new Error(
+      'GITHUB_INVALID_RESPONSE'
     );
-
-    return {
-      ok: false,
-      status: githubResponse.status,
-      data: githubData,
-    };
   }
 
-  if (githubData.error) {
-    return {
-      ok: false,
-      status: 400,
-      data: githubData,
-    };
-  }
-
-  if (!githubData.access_token) {
-    console.error(
-      'GitHub OAuth response contained no access token.'
-    );
-
-    throw new Error('NO_ACCESS_TOKEN');
-  }
 
   return {
-    ok: true,
-    status: 200,
-    data: githubData,
+    response,
+    data
   };
 }
 
 
 // ─────────────────────────────────────────────────────────────
-// MAIN REQUEST HANDLER
+// MAIN HANDLER
 // ─────────────────────────────────────────────────────────────
 
-async function handleRequest(request, env) {
+async function handleRequest(
+  request,
+  env
+) {
 
-  const url = new URL(request.url);
+  const url =
+    new URL(request.url);
 
-  const origin = getAllowedOrigin(request);
 
-  // ── CORS preflight ──────────────────────────────────────────
+  const origin =
+    getOrigin(request);
 
-  if (request.method === 'OPTIONS') {
+
+  // ─────────────────────────────────────────────────────────
+  // PREFLIGHT
+  // ─────────────────────────────────────────────────────────
+
+  if (
+    request.method === 'OPTIONS'
+  ) {
 
     if (!origin) {
-      return new Response(null, {
-        status: 403,
-      });
+
+      return new Response(
+        null,
+        {
+          status: 403
+        }
+      );
     }
 
-    return new Response(null, {
-      status: 204,
-      headers: corsHeaders(origin),
-    });
+
+    return new Response(
+      null,
+      {
+        status: 204,
+        headers:
+          corsHeaders(origin)
+      }
+    );
   }
 
 
-  // ── Origin protection ──────────────────────────────────────
+  // ─────────────────────────────────────────────────────────
+  // ORIGIN CHECK
+  // ─────────────────────────────────────────────────────────
 
   if (!origin) {
-    return jsonResponse(
+
+    return json(
       {
-        error: 'Forbidden',
+        error:
+          'Forbidden origin.'
       },
       403
     );
   }
 
 
-  // ── Endpoint protection ────────────────────────────────────
+  // ─────────────────────────────────────────────────────────
+  // PATH
+  // ─────────────────────────────────────────────────────────
 
-  if (url.pathname !== EXCHANGE_PATH) {
-    return jsonResponse(
+  if (
+    url.pathname !== EXCHANGE_PATH
+  ) {
+
+    return json(
       {
-        error: 'Not found',
+        error:
+          'Not found.'
       },
       404,
       origin
@@ -353,65 +361,74 @@ async function handleRequest(request, env) {
   }
 
 
-  // ── Method protection ──────────────────────────────────────
+  // ─────────────────────────────────────────────────────────
+  // METHOD
+  // ─────────────────────────────────────────────────────────
 
-  if (request.method !== 'POST') {
-    return jsonResponse(
+  if (
+    request.method !== 'POST'
+  ) {
+
+    return new Response(
+
+      JSON.stringify({
+        error:
+          'Method not allowed.'
+      }),
+
       {
-        error: 'Method not allowed',
-      },
-      405,
-      origin,
-      {
-        'Allow': 'POST, OPTIONS',
+        status: 405,
+
+        headers: {
+
+          'Content-Type':
+            'application/json',
+
+          'Allow':
+            'POST, OPTIONS',
+
+          ...corsHeaders(origin)
+
+        }
       }
+
     );
   }
 
 
-  // ── Rate limiting ──────────────────────────────────────────
-
-  const ip =
-    request.headers.get('CF-Connecting-IP') ||
-    'unknown';
-
-  const rateLimit = await checkRateLimit(ip, env);
-
-  if (rateLimit.limited) {
-    return jsonResponse(
-      {
-        error: 'Too many requests. Please wait and try again.',
-      },
-      429,
-      origin,
-      {
-        'Retry-After': String(rateLimit.retryAfter),
-      }
-    );
-  }
-
-
-  // ── Parse request ──────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────
+  // BODY
+  // ─────────────────────────────────────────────────────────
 
   let payload;
 
   try {
-    payload = await readJsonBody(request);
+
+    payload =
+      await readBody(request);
+
   } catch (error) {
 
-    if (error.message === 'PAYLOAD_TOO_LARGE') {
-      return jsonResponse(
+    if (
+      error.message ===
+      'PAYLOAD_TOO_LARGE'
+    ) {
+
+      return json(
         {
-          error: 'Payload too large.',
+          error:
+            'Payload too large.'
         },
         413,
         origin
       );
     }
 
-    return jsonResponse(
+
+    return json(
       {
-        error: 'Invalid JSON body.',
+        error:
+          'Invalid JSON body.'
       },
       400,
       origin
@@ -419,12 +436,19 @@ async function handleRequest(request, env) {
   }
 
 
-  // ── Validate payload ───────────────────────────────────────
+  // ─────────────────────────────────────────────────────────
+  // VALIDATION
+  // ─────────────────────────────────────────────────────────
 
-  if (!payload || typeof payload !== 'object') {
-    return jsonResponse(
+  if (
+    !payload ||
+    typeof payload !== 'object'
+  ) {
+
+    return json(
       {
-        error: 'Invalid request body.',
+        error:
+          'Invalid request body.'
       },
       400,
       origin
@@ -433,12 +457,13 @@ async function handleRequest(request, env) {
 
 
   if (
-    typeof payload.client_id !== 'string' ||
-    payload.client_id !== EXPECTED_CLIENT_ID
+    payload.client_id !== CLIENT_ID
   ) {
-    return jsonResponse(
+
+    return json(
       {
-        error: 'Invalid client_id.',
+        error:
+          'Invalid OAuth client ID.'
       },
       400,
       origin
@@ -448,12 +473,14 @@ async function handleRequest(request, env) {
 
   if (
     typeof payload.code !== 'string' ||
-    payload.code.length === 0 ||
+    payload.code.length < 1 ||
     payload.code.length > 512
   ) {
-    return jsonResponse(
+
+    return json(
       {
-        error: 'Missing or invalid OAuth code.',
+        error:
+          'Missing or invalid OAuth code.'
       },
       400,
       origin
@@ -461,119 +488,143 @@ async function handleRequest(request, env) {
   }
 
 
-  // ── Exchange code with GitHub ──────────────────────────────
+  // ─────────────────────────────────────────────────────────
+  // TOKEN EXCHANGE
+  // ─────────────────────────────────────────────────────────
 
   try {
 
-    const result = await exchangeGitHubCode(
-      payload,
-      env
-    );
+    const result =
+      await exchangeCode(
+        payload.code,
+        env
+      );
 
 
-    if (!result.ok) {
+    const githubData =
+      result.data;
 
-      return jsonResponse(
-        result.data,
-        result.status,
+
+    if (
+      githubData.error
+    ) {
+
+      console.error(
+        'GitHub OAuth error:',
+        githubData.error
+      );
+
+
+      return json(
+        {
+          error:
+            githubData.error,
+
+          error_description:
+            githubData.error_description ||
+            undefined
+        },
+        400,
         origin
       );
     }
 
 
-    return jsonResponse(
-      result.data,
+    if (
+      !githubData.access_token
+    ) {
+
+      console.error(
+        'GitHub returned no access token.'
+      );
+
+
+      return json(
+        {
+          error:
+            'GitHub did not return an access token.'
+        },
+        502,
+        origin
+      );
+    }
+
+
+    return json(
+      githubData,
       200,
-      origin,
-      {
-        'Cache-Control': 'no-store',
-        'Pragma': 'no-cache',
-      }
+      origin
     );
+
 
   } catch (error) {
 
     console.error(
-      'DemonZ Deployer OAuth exchange error:',
+      'OAuth exchange failed:',
       error.message
     );
 
 
-    switch (error.message) {
+    if (
+      error.message ===
+      'SERVER_MISCONFIGURED'
+    ) {
 
-      case 'SERVER_MISCONFIGURED':
-        return jsonResponse(
-          {
-            error:
-              'Worker configuration error. CLIENT_SECRET is not configured.',
-          },
-          500,
-          origin
-        );
-
-
-      case 'INVALID_CLIENT_ID':
-        return jsonResponse(
-          {
-            error: 'Invalid OAuth client ID.',
-          },
-          400,
-          origin
-        );
-
-
-      case 'INVALID_CODE':
-        return jsonResponse(
-          {
-            error: 'Invalid OAuth authorization code.',
-          },
-          400,
-          origin
-        );
-
-
-      case 'GITHUB_INVALID_RESPONSE':
-        return jsonResponse(
-          {
-            error:
-              'GitHub returned an invalid OAuth response.',
-          },
-          502,
-          origin
-        );
-
-
-      case 'NO_ACCESS_TOKEN':
-        return jsonResponse(
-          {
-            error:
-              'GitHub did not return an access token.',
-          },
-          502,
-          origin
-        );
-
-
-      default:
-        return jsonResponse(
-          {
-            error:
-              'Unable to complete GitHub OAuth exchange.',
-          },
-          502,
-          origin
-        );
+      return json(
+        {
+          error:
+            'Worker configuration error: CLIENT_SECRET is not configured.'
+        },
+        500,
+        origin
+      );
     }
+
+
+    if (
+      error.message ===
+      'GITHUB_INVALID_RESPONSE'
+    ) {
+
+      return json(
+        {
+          error:
+            'GitHub returned an invalid response.'
+        },
+        502,
+        origin
+      );
+    }
+
+
+    return json(
+      {
+        error:
+          'Unable to complete GitHub OAuth exchange.'
+      },
+      502,
+      origin
+    );
   }
 }
 
 
 // ─────────────────────────────────────────────────────────────
-// CLOUDFLARE WORKER ENTRY POINT
+// CLOUDFLARE ENTRY POINT
 // ─────────────────────────────────────────────────────────────
 
 export default {
-  async fetch(request, env) {
-    return handleRequest(request, env);
-  },
+
+  async fetch(
+    request,
+    env
+  ) {
+
+    return handleRequest(
+      request,
+      env
+    );
+
+  }
+
 };
